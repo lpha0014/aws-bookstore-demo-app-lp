@@ -1,62 +1,32 @@
-import React from "react";
-import { API } from "aws-amplify";
+import { useState, useEffect } from 'react';
+import { get } from 'aws-amplify/api';
+import BestSellerProductRow from './BestSellerProductRow';
+import { CategoryNavBar } from '../category/categoryNavBar/CategoryNavBar';
+import { SearchBar } from '../search/searchBar/SearchBar';
 
-import BestSellerProductRow from "./BestSellerProductRow";
-import { CategoryNavBar } from "../category/categoryNavBar/CategoryNavBar";
-import { SearchBar } from "../search/searchBar/SearchBar";
+export default function BestSellers() {
+  const [books, setBooks] = useState<{ bookId: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-interface BestSellersProps {}
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await get({ apiName: 'bestsellers', path: '/bestsellers' }).response;
+        const bestSellers = await res.body.json() as any;
+        setBooks(bestSellers.map((b: string) => ({ bookId: JSON.parse(b) })));
+      } catch (e) { alert(e); }
+      setIsLoading(false);
+    })();
+  }, []);
 
-interface BestSellersState {
-  isLoading: boolean;
-  books: { bookId: any; }[];
-}
-
-export default class BestSellers extends React.Component<BestSellersProps, BestSellersState> {
-  constructor(props: BestSellersProps) {
-    super(props);
-
-    this.state = {
-      isLoading: true,
-      books: []
-    };
-  }
-
-  async componentDidMount() {
-    try {
-      const books = [];
-      const bestSellers = await API.get("bestsellers", "/bestsellers", null);
-      
-      // Map the elasticache results to a book object
-      for (var i = 0; i < bestSellers.length; i++) {
-        var hit = JSON.parse(bestSellers[i]);
-        books.push({ bookId: hit });
-      }
-      this.setState({
-        books: books,
-        isLoading: false
-      });
-    } catch(error) {
-      alert(error);
-    }
-  }
-
-  render() {
-    return (
-      <div className="Category">
-        <SearchBar />
-        <CategoryNavBar />
-        <div>
-          <div className="well-bs no-radius">
-            <div className="container-category">
-              <h3>Top 20 best sellers</h3>
-            </div>
-            {this.state.isLoading ? <div className="loader" /> :
-              this.state.books.slice(0,20).map(book => <BestSellerProductRow bookId={book.bookId} key={book.bookId} />
-            )}  
-          </div>
-        </div>
+  return (
+    <div className="Category">
+      <SearchBar />
+      <CategoryNavBar />
+      <div className="well-bs no-radius">
+        <div className="container-category"><h3>Top 20 best sellers</h3></div>
+        {isLoading ? <div className="loader" /> : books.slice(0, 20).map(b => <BestSellerProductRow bookId={b.bookId} key={b.bookId} />)}
       </div>
-    );
-  }
+    </div>
+  );
 }

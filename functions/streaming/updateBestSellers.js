@@ -1,43 +1,28 @@
 "use strict";
 
-var redis = require("redis");
+const redis = require("redis");
 
 // UpdateBestSellers - Updates best sellers list as orders are placed
-exports.handler = (event, context, callback) => {
-  context.callbackWaitsForEmptyEventLoop = false;
+exports.handler = async (event) => {
+  const redisClient = redis.createClient({ url: `redis://${process.env.URL}:6379` });
 
-  var redisClient = redis.createClient(6379, process.env.URL, {no_ready_check: true}); // ElastiCache Redis cluster URL
-  console.log("Client created.");
+  try {
+    await redisClient.connect();
 
-  redisClient.on("error", function (err) {
-    console.log("Redis error encountered", err);
-  });
-
-  redisClient.on("end", function() {
-    console.log("Redis connection closed");
-  });
-
-  event.Records && event.Records.forEach((record) => {         
-    const booksList = record.dynamodb.NewImage.books.L;
-    for (var i = 0; i < booksList.length; i++) {
-      var book = record.dynamodb.NewImage.books.L[i];
-      console.log("book: " + JSON.stringify(book));
-            
-      var itemsSold = book.M.quantity.N;
-      var value = book.M.bookId.S; // bookId
-      var key = "TopBooks:AllTime";
-
-      // Increment the score of the member (bookId) in the sorted set stored at key (TopBooks:AllTime) by increment (itemsSold)
-      // If the bookId does not exist in the sorted set, it is added with increment as its score
-      redisClient.zincrby(key, itemsSold, JSON.stringify(value), (error, reply) => {
-        if(error) {
-          console.log("error: " + error);
-          callback(null, error);
-        }
-        console.log("reply: " + reply);
-        callback(null, reply);
-      });
-      console.log("Value inserted.");
+    for (const record of event.Records) {
+      const booksList = record.dynamodb.NewImage.books.L;
+      for (const book of booksList) {
+        const itemsSold = parseInt(book.M.quantity.N, 10);
+        const bookId = book.M.bookId.S;
+        await redisClient.zIncrBy("TopBooks:AllTime", itemsSold, JSON.stringify(bookId));
+        console.log(`Incremented ${bookId} by ${itemsSold}`);
+      }
     }
-  });
-}
+
+    await redisClient.quit();
+  } catch (error) {
+    console.log("Redis error:", error);
+    try { await redisClient.quit(); } catch (e) { /* ignore */ }
+    throw error;
+  }
+};

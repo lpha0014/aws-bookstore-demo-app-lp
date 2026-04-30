@@ -1,58 +1,34 @@
-import React from "react";
-import "../../common/styles/gallery.css";
-import { API } from "aws-amplify";
-import CategoryGalleryBook from "./CategoryGalleryBook";
-import { Book } from "../bestSellers/BestSellerProductRow";
+import { useState, useEffect } from 'react';
+import { get } from 'aws-amplify/api';
+import '../../common/styles/gallery.css';
+import CategoryGalleryBook from './CategoryGalleryBook';
+import { Book } from '../bestSellers/BestSellerProductRow';
 
-interface CategoryGalleryProps {
-  match: any;
-}
+interface CategoryGalleryProps { categoryId: string; }
 
-interface CategoryGalleryState {
-  isLoading: boolean;
-  books: Book[];
-}
+export function CategoryGallery({ categoryId }: CategoryGalleryProps) {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-export class CategoryGallery extends React.Component<CategoryGalleryProps, CategoryGalleryState> {
-  constructor(props: CategoryGalleryProps) {
-    super(props);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await get({ apiName: 'books', path: `/books?category=${categoryId}` }).response;
+        setBooks(await res.body.json() as any || []);
+      } catch (e) { alert(e); }
+      setIsLoading(false);
+    })();
+  }, [categoryId]);
 
-    this.state = {
-      isLoading: true,
-      books: []
-    };
-  }
-
-  async componentDidMount() {
-    try {
-      const books = await this.listBooks();
-      this.setState({ books });
-    } catch (e) {
-      alert(e);
-    }
-
-    this.setState({ isLoading: false });
-  }
-
-  listBooks() {
-    return API.get("books", `/books?category=${this.props.match.params.id}`, null);
-  }
-
-  render() {
-    return (
-      this.state.isLoading ? <div className="loader" /> :
-      <div>
-        <div className="well-bs no-radius">
-          <div className="container-category">
-            <h3>{this.props.match.params.id}</h3>
-            <div className="row">
-              {this.state.books.map(book => <CategoryGalleryBook book={book} key={book.id} />)}
-            </div>
-          </div>
-        </div>
+  if (isLoading) return <div className="loader" />;
+  return (
+    <div className="well-bs no-radius">
+      <div className="container-category">
+        <h3>{categoryId}</h3>
+        <div className="row">{books.map(book => <CategoryGalleryBook book={book} key={book.id} />)}</div>
       </div>
-    );
-  }
+    </div>
+  );
 }
 
 export default CategoryGallery;

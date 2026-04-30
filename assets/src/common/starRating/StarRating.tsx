@@ -1,23 +1,9 @@
-import React from 'react';
-import { Glyphicon } from 'react-bootstrap';
-import "./starRating.css";
+import './starRating.css';
 
-interface StarRatingProps {
-  stars: number
+export default function StarRating({ stars }: { stars: number }) {
+  return (
+    <span className="star-rating">
+      {[1, 2, 3, 4, 5].map(i => <span key={i}>{stars >= i ? '★' : '☆'}</span>)}
+    </span>
+  );
 }
-
-class StarRating extends React.Component<StarRatingProps> {
-  render() { 
-    return (
-      <span>             
-        <Glyphicon glyph={this.props.stars >= 1 ? "star" : "star-empty"} />
-        <Glyphicon glyph={this.props.stars >= 2 ? "star" : "star-empty"} />
-        <Glyphicon glyph={this.props.stars >= 3 ? "star" : "star-empty"} />
-        <Glyphicon glyph={this.props.stars >= 4 ? "star" : "star-empty"} />
-        <Glyphicon glyph={this.props.stars >= 5 ? "star" : "star-empty"} />                          
-      </span>
-    );
-  }
-}
-
-export default StarRating;

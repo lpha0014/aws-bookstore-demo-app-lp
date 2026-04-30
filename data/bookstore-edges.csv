@@ -1,0 +1,16 @@
+~id,~from,~to,~label
+e1,anonymous,friend1,friendOf
+e2,anonymous,friend2,friendOf
+e3,anonymous,friend3,friendOf
+e4,friend1,anonymous,friendOf
+e5,friend2,anonymous,friendOf
+e6,friend3,anonymous,friendOf
+e7,friend1,b001,purchased
+e8,friend1,b003,purchased
+e9,friend1,b008,purchased
+e10,friend2,b002,purchased
+e11,friend2,b004,purchased
+e12,friend2,b011,purchased
+e13,friend3,b007,purchased
+e14,friend3,b001,purchased
+e15,friend3,b014,purchased

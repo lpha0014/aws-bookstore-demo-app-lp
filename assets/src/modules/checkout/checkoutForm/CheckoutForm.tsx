@@ -1,142 +1,65 @@
-import React from "react";
-import { FormGroup, FormControl, ControlLabel, Form, FormControlProps } from "react-bootstrap";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Form, Button } from 'react-bootstrap';
+import { get, post } from 'aws-amplify/api';
+import './checkoutForm.css';
+import supportedCards from '../../../images/supportedCards.png';
 
-import "./checkoutForm.css";
-import supportedCards from "../../../images/supportedCards.png";
-import { API } from "aws-amplify";
-import { Redirect } from "react-router";
+export function CheckoutForm() {
+  const [card, setCard] = useState('1010101010101010');
+  const [expDate, setExpDate] = useState('');
+  const [ccv, setCcv] = useState('123');
+  const [isLoading, setIsLoading] = useState(true);
+  const [orders, setOrders] = useState<any[]>([]);
+  const navigate = useNavigate();
 
-interface CheckoutFormProps {}
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await get({ apiName: 'cart', path: '/cart' }).response;
+        setOrders(await res.body.json() as any || []);
+      } catch (e) { alert(e); }
+      setIsLoading(false);
+    })();
+  }, []);
 
-interface CheckoutFormState {
-  card: string;
-  expDate: string | undefined;
-  ccv: string;
-  isLoading: boolean;
-  toCart: boolean;
-  orders: any[];
-  toConfirm: boolean;
-}
+  const orderTotal = orders.reduce((t, b) => t + b.price * b.quantity, 0).toFixed(2);
 
-export class CheckoutForm extends React.Component<CheckoutFormProps, CheckoutFormState> {
-  constructor(props: CheckoutFormProps) {
-    super(props);
+  const onCheckout = async () => {
+    await post({ apiName: 'orders', path: '/orders', options: { body: { books: orders } } }).response;
+    navigate('/checkout-confirm');
+  };
 
-    this.state = {
-      card: '1010101010101010',
-      expDate: undefined,
-      ccv: '123',
-      isLoading: true,
-      toCart: false,
-      orders: [],
-      toConfirm: false,
-    };
-  }
+  if (isLoading) return null;
 
-  async componentDidMount() {
-    try {
-      const orders = await this.listOrdersInCart();
-      this.setState({
-        orders: orders
-      });
-    } catch (e) {
-      alert(e);
-    }
-
-    this.setState({ isLoading: false });
-  }
-
-  listOrdersInCart() {
-    return API.get("cart", "/cart", null);
-  }
-
-  getOrderTotal = () => {
-    return this.state.orders.reduce((total, book) => {
-      return total + book.price * book.quantity
-    }, 0).toFixed(2);
-  }
-
-  getCardNumberValidationState() {
-    const length = this.state.card.length;
-    if (length >= 15 && length <= 19) return 'success';
-    else if (length !== 0 && (length < 15 || length > 19)) return 'error';
-    return null;
-  }
-
-  handleChange = (event: React.FormEvent<FormControl>) => {
-    const target = event.target as HTMLInputElement
-    this.setState({ 
-      ...this.state,
-      [target.name as any]: target.value
-    });
-  }
-
-  onCheckout = () => {
-    const orders = this.state.orders;
-    API.post("orders", "/orders", {
-      body: {
-        books: orders
-      }
-    }).then(() => this.setState({
-      toConfirm: true
-    }));
-  }
-
-  render() {
-    if (this.state.toConfirm) return <Redirect to='/checkout-confirm' />
-
-    if (this.state.isLoading) return null;
-    return (
-      <div className="well-bs col-md-12 full-page no-padding-top">
-        <div className="white-box no-margin-top">
-          <div className="checkout ">
-            <img src={supportedCards} alt="Supported cards" />
-            <Form>
-              <FormGroup
-                controlId="card"
-                validationState={this.getCardNumberValidationState()}>
-                <ControlLabel>Card number</ControlLabel>
-                <FormControl
-                  name="card"
-                  type="text"
-                  value={this.state.card}
-                  onChange={this.handleChange} />
-                <FormControl.Feedback />
-              </FormGroup>
-              <div className="form-row">
-                <FormGroup
-                  controlId="expDate">
-                  <ControlLabel>Expiration date</ControlLabel>
-                  <FormControl
-                    name="expDate"
-                    type="date"
-                    value={this.state.expDate}
-                    onChange={this.handleChange} />
-                  <FormControl.Feedback />
-                </FormGroup>
-                <FormGroup
-                  className="ccv"
-                  controlId="ccv">
-                  <ControlLabel>CCV</ControlLabel>
-                  <FormControl
-                    name="ccv"
-                    type="text"
-                    value={this.state.ccv}
-                    onChange={this.handleChange} />
-                  <FormControl.Feedback />
-                </FormGroup>
-              </div>
-            </Form>
-          </div>
-        </div>
-        <div className="pull-right">
-          <button className="btn btn-black" type="button" onClick={this.onCheckout}>{`Pay ($${this.getOrderTotal()})`}</button>
+  return (
+    <div className="well-bs col-md-12 full-page no-padding-top">
+      <div className="white-box no-margin-top">
+        <div className="checkout">
+          <img src={supportedCards} alt="Supported cards" />
+          <Form>
+            <Form.Group controlId="card" className="mb-3">
+              <Form.Label>Card number</Form.Label>
+              <Form.Control type="text" value={card} onChange={(e) => setCard(e.target.value)} />
+            </Form.Group>
+            <div className="form-row">
+              <Form.Group controlId="expDate" className="mb-3">
+                <Form.Label>Expiration date</Form.Label>
+                <Form.Control type="date" value={expDate} onChange={(e) => setExpDate(e.target.value)} />
+              </Form.Group>
+              <Form.Group controlId="ccv" className="mb-3">
+                <Form.Label>CCV</Form.Label>
+                <Form.Control type="text" value={ccv} onChange={(e) => setCcv(e.target.value)} />
+              </Form.Group>
+            </div>
+          </Form>
         </div>
       </div>
-    );
-  }
+      <div className="float-end">
+        <Button variant="dark" onClick={onCheckout}>{`Pay ($${orderTotal})`}</Button>
+      </div>
+    </div>
+  );
 }
 
 export default CheckoutForm;
-
-

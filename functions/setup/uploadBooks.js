@@ -1,85 +1,50 @@
-"use strict"; 
+"use strict";
 
-const https = require("https"); 
+const https = require("https");
 const url = require("url");
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, BatchWriteCommand } = require("@aws-sdk/lib-dynamodb");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 
-var AWS = require("aws-sdk"),
-documentClient = new AWS.DynamoDB.DocumentClient(),
-s3Client = new AWS.S3;
+const dynamoDb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const s3Client = new S3Client({});
 
 // UploadBooks - Upload sample set of books to DynamoDB
-exports.handler = function(event, context, callback) {
+exports.handler = async (event, context) => {
   console.log("Received event:", JSON.stringify(event, null, 2));
-  
-  if (event.RequestType === "Create") {
-    getBooksData().then(function(data) {
-      var booksString = data.Body.toString("utf-8"); 
-      var booksList = JSON.parse(booksString);
-      uploadBooksData(booksList);
-    }).catch(function(err) {
-      console.log(err);
-      var responseData = { Error: "Upload books failed" };
-      console.log(responseData.Error);
-      sendResponse(event, callback, context.logStreamName, "FAILED", responseData);
-    });
-    sendResponse(event, callback, context.logStreamName, "SUCCESS");
+
+  if (event.RequestType !== "Create") {
+    await sendResponse(event, context.logStreamName, "SUCCESS");
     return;
-  } else {
-    sendResponse(event, callback, context.logStreamName, "SUCCESS");
-    return;
+  }
+
+  try {
+    const response = await s3Client.send(new GetObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: process.env.FILE_NAME
+    }));
+    const booksString = await response.Body.transformToString("utf-8");
+    const booksList = JSON.parse(booksString);
+
+    // Batch items into arrays of 25 for BatchWriteItem limit
+    const tableName = process.env.TABLE_NAME;
+    for (let i = 0; i < booksList.length; i += 25) {
+      const batch = booksList.slice(i, i + 25).map((book) => ({
+        PutRequest: { Item: book }
+      }));
+      await dynamoDb.send(new BatchWriteCommand({
+        RequestItems: { [tableName]: batch }
+      }));
+    }
+    console.log("Books imported");
+    await sendResponse(event, context.logStreamName, "SUCCESS");
+  } catch (err) {
+    console.log(err);
+    await sendResponse(event, context.logStreamName, "FAILED", { Error: "Upload books failed" });
   }
 };
-function uploadBooksData(book_items) {
-  var items_array = [];
-  for (var i in book_items) {
-    var book = book_items[i];
-    console.log(book.id)
-    var item = {
-      PutRequest: {
-       Item: book
-      }
-    };
-    items_array.push(item);
-  }
 
-  // Batch items into arrays of 25 for BatchWriteItem limit
-  var split_arrays = [], size = 25;
-    while (items_array.length > 0) {
-        split_arrays.push(items_array.splice(0, size));
-    } 
-  
-  split_arrays.forEach( function(item_data) {
-    putItem(item_data)
-  });
-}
-
-// Retrieve sample books from aws-bookstore-demo S3 Bucket
-function getBooksData() {
-  var params = {
-    Bucket: process.env.S3_BUCKET, // aws-bookstore-demo
-    Key: process.env.FILE_NAME // data/books.json
- };
- return s3Client.getObject(params).promise();
-}
-
-// Batch write books to DynamoDB
-function putItem(items_array) {
-  var tableName = process.env.TABLE_NAME; // [ProjectName]-Books
-  var params = {
-    RequestItems: { 
-      [tableName]: items_array
-    }
-  };
-  var batchWritePromise = documentClient.batchWrite(params).promise();
-  batchWritePromise.then(function(data) {
-    console.log("Books imported");
-  }).catch(function(err) {
-    console.log(err);
-  });
-}
-
-// Send response back to CloudFormation template runner
-function sendResponse(event, callback, logStreamName, responseStatus, responseData) {
+function sendResponse(event, logStreamName, responseStatus, responseData) {
   const responseBody = JSON.stringify({
     Status: responseStatus,
     Reason: `See the details in CloudWatch Log Stream: ${logStreamName}`,
@@ -89,8 +54,6 @@ function sendResponse(event, callback, logStreamName, responseStatus, responseDa
     LogicalResourceId: event.LogicalResourceId,
     Data: responseData,
   });
-
-  console.log("RESPONSE BODY:\n", responseBody);
 
   const parsedUrl = url.parse(event.ResponseURL);
   const options = {
@@ -104,17 +67,16 @@ function sendResponse(event, callback, logStreamName, responseStatus, responseDa
     },
   };
 
-  const req = https.request(options, (res) => {
-    console.log("STATUS:", res.statusCode);
-    console.log("HEADERS:", JSON.stringify(res.headers));
-    callback(null, "Successfully sent stack response!");
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      console.log("STATUS:", res.statusCode);
+      resolve();
+    });
+    req.on("error", (err) => {
+      console.log("sendResponse Error:", err);
+      reject(err);
+    });
+    req.write(responseBody);
+    req.end();
   });
-
-  req.on("error", (err) => {
-    console.log("sendResponse Error:\n", err);
-    callback(err);
-  });
-
-  req.write(responseBody);
-  req.end();
 }

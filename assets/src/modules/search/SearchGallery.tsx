@@ -1,76 +1,44 @@
-import React from "react";
-import "../../common/styles/gallery.css";
-import { API } from "aws-amplify";
-import CategoryGalleryBook from "../category/CategoryGalleryBook";
-import { Book } from "../bestSellers/BestSellerProductRow";
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { get } from 'aws-amplify/api';
+import '../../common/styles/gallery.css';
+import CategoryGalleryBook from '../category/CategoryGalleryBook';
+import { Book } from '../bestSellers/BestSellerProductRow';
 
-interface SearchGalleryProps {
-  match: any;
-}
+export function SearchGallery() {
+  const { id } = useParams<{ id: string }>();
+  const [books, setBooks] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-interface SearchGalleryState {
-  isLoading: boolean;
-  books: Book[];
-}
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await get({ apiName: 'search', path: `/search?q=${id}` }).response;
+        const searchResults = await res.body.json() as any;
+        const mapped = (searchResults.hits?.hits || []).map((hit: any) => ({
+          author: hit._source.author.S,
+          category: hit._source.category.S,
+          cover: hit._source.cover.S,
+          id: hit._source.id.S,
+          name: hit._source.name.S,
+          price: hit._source.price.N,
+          rating: hit._source.rating.N,
+        }));
+        setBooks(mapped);
+      } catch (e) { alert(e); }
+      setIsLoading(false);
+    })();
+  }, [id]);
 
-export class SearchGallery extends React.Component<SearchGalleryProps, SearchGalleryState> {
-  constructor(props: SearchGalleryProps) {
-    super(props);
-
-    this.state = {
-      isLoading: true,
-      books: []
-    };
-  }
-
-  async componentDidMount() {
-    try {
-      const searchResults = await this.searchBooks();
-
-      // Map the search results to a book object
-      const books = [];
-      for (var i = 0; i < searchResults.hits.total.value; i++) {
-        var hit = searchResults.hits.hits[i] && searchResults.hits.hits[i]._source;
-        hit && books.push({
-          author: hit.author.S,
-          category: hit.category.S,
-          cover: hit.cover.S,
-          id: hit.id.S,
-          name: hit.name.S,
-          price: hit.price.N,
-          rating: hit.rating.N,
-        });
-      }
-
-      this.setState({ 
-        books: books
-      });
-    } catch (e) {
-      alert(e);
-    }
-
-    this.setState({ isLoading: false });
-  }
-
-  searchBooks() {
-    return API.get("search", `/search?q=${this.props.match.params.id}`, null);
-  }
-
-  render() {
-    return (
-      this.state.isLoading ? <div className="loader" /> :
-      <div>
-        <div className="well-bs no-radius">
-          <div className="container-category">
-            <h3>Search results</h3>
-            <div className="row">
-              {this.state.books.map(book => <CategoryGalleryBook book={book} key={book.id} />)}
-            </div>
-          </div>
-        </div>
+  if (isLoading) return <div className="loader" />;
+  return (
+    <div className="well-bs no-radius">
+      <div className="container-category">
+        <h3>Search results</h3>
+        <div className="row">{books.map(book => <CategoryGalleryBook book={book} key={book.id} />)}</div>
       </div>
-    );
-  }
+    </div>
+  );
 }
 
 export default SearchGallery;

@@ -10,8 +10,7 @@ credentials = boto3.Session().get_credentials()
 awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, region, service, session_token=credentials.token)
 
 index = "lambda-index"
-type = "lambda-type"
-url = "https://" + os.environ["ESENDPOINT"] + "/_search" # ElasticSearch cluster URL
+url = "https://" + os.environ["ESENDPOINT"] + "/_search"  # OpenSearch cluster URL
 
 # Search - Search for books across book names, authors, and categories
 def handler(event, context):
@@ -26,10 +25,9 @@ def handler(event, context):
             }
         }
     }
-    print query
+    print(query)
 
-    # ES 6.x requires an explicit Content-Type header
-    headers = { "Content-Type": "application/json" }
+    headers = {"Content-Type": "application/json"}
 
     # Make the signed HTTP request
     r = requests.get(url, auth=awsauth, headers=headers, data=json.dumps(query))
@@ -44,6 +42,5 @@ def handler(event, context):
         "body": r.text
     }
 
-    # Add the search results to the response
-    print response
+    print(response)
     return response

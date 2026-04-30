@@ -1,57 +1,33 @@
-import React from "react";
-import "../../common/styles/gallery.css";
-import { LinkContainer } from "react-router-bootstrap";
-import { API } from "aws-amplify";
-import CategoryGalleryBook from "./CategoryGalleryBook";
-import { Book } from "../bestSellers/BestSellerProductRow";
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { get } from 'aws-amplify/api';
+import '../../common/styles/gallery.css';
+import CategoryGalleryBook from './CategoryGalleryBook';
+import { Book } from '../bestSellers/BestSellerProductRow';
 
-interface CategoryGalleryTeaserProps {}
+export function CategoryGalleryTeaser() {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-interface CategoryGalleryTeaserState {
-  isLoading: boolean;
-  books: Book[];
-}
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await get({ apiName: 'books', path: '/books?category=Cookbooks' }).response;
+        setBooks(await res.body.json() as any || []);
+      } catch (e) { alert(e); }
+      setIsLoading(false);
+    })();
+  }, []);
 
-export class CategoryGalleryTeaser extends React.Component<CategoryGalleryTeaserProps, CategoryGalleryTeaserState> {
-  constructor(props: CategoryGalleryTeaserProps) {
-    super(props);
-
-    this.state = {
-      isLoading: true,
-      books: []
-    };
-  }
-
-  async componentDidMount() {
-    try {
-      const books = await this.listBooks();
-      this.setState({ books });
-    } catch (e) {
-      alert(e);
-    }
-
-    this.setState({ isLoading: false });
-  }
-
-  listBooks() {
-    return API.get("books", "/books?category=Cookbooks", null);
-  }
-
-  render() {
-    return (
-      this.state.isLoading ? <div className="loader" /> :
-      <div>
-        <div className="well-bs no-padding-top col-md-12 no-radius">
-          <div className="container-category">
-            <h3>Cookbooks <small><LinkContainer to="/category/Cookbooks"><a>Browse cookbooks</a></LinkContainer></small></h3>
-            <div className="row">
-              {this.state.books.slice(0,4).map(book => <CategoryGalleryBook book={book} key={book.id} />)}
-            </div>
-          </div>
-        </div>
+  if (isLoading) return <div className="loader" />;
+  return (
+    <div className="well-bs no-padding-top col-md-12 no-radius">
+      <div className="container-category">
+        <h3>Cookbooks <small><Link to="/category/Cookbooks">Browse cookbooks</Link></small></h3>
+        <div className="row">{books.slice(0, 4).map(book => <CategoryGalleryBook book={book} key={book.id} />)}</div>
       </div>
-    );
-  }
+    </div>
+  );
 }
 
 export default CategoryGalleryTeaser;

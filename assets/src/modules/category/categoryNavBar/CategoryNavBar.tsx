@@ -1,16 +1,17 @@
-import React from "react";
-import { categories } from "./categories";
-import "./categories.css"
+import { Link } from 'react-router-dom';
+import { categories } from './categories';
+import './categories.css';
 
-export class CategoryNavBar extends React.Component {
-  render() {
-    return (
-      <ul className="nav nav-pills justify-content-center nav-cat">
-        {Object.values(categories).map(category =>
-          <li role="presentation" key={category}><a className="category-link" href={`/category/${category}`}>{category}</a></li>)}
-      </ul>
-    );
-  }
+export function CategoryNavBar() {
+  return (
+    <ul className="nav nav-pills justify-content-center nav-cat">
+      {Object.values(categories).map(category => (
+        <li className="nav-item" key={category}>
+          <Link className="nav-link category-link" to={`/category/${category}`}>{category}</Link>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default CategoryNavBar;

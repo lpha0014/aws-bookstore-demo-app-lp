@@ -1,91 +1,47 @@
-import React, { Component } from "react";
-import { CategoryNavBar } from "../category/categoryNavBar/CategoryNavBar";
-import { SearchBar } from "../search/searchBar/SearchBar";
-import "../../common/hero/hero.css";
-import { CartProductRow, Order } from "./CartProductRow";
-import "../../common/styles/common.css";
-import { API } from "aws-amplify";
-import { Redirect } from "react-router";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { get } from 'aws-amplify/api';
+import { CategoryNavBar } from '../category/categoryNavBar/CategoryNavBar';
+import { SearchBar } from '../search/searchBar/SearchBar';
+import { CartProductRow, Order } from './CartProductRow';
+import '../../common/hero/hero.css';
+import '../../common/styles/common.css';
 
-interface ShoppingCartProps {}
+export default function ShoppingCart() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
-interface ShoppingCartState {
-  isLoading: boolean;
-  orders: any[]; // FIXME
-  orderTotal: number | undefined;
-  toCheckout: boolean;
-}
-
-export default class ShoppingCart extends Component<ShoppingCartProps, ShoppingCartState> {
-  constructor(props: ShoppingCartProps) {
-    super(props);
-
-    this.state = {
-      isLoading: true,
-      orders: [],
-      orderTotal: undefined,
-      toCheckout: false
-    };
-  }
-
-  async componentDidMount() {
+  const fetchCart = async () => {
     try {
-      const ordersInCart = await this.listOrdersInCart();
-      this.setState({ 
-        orders: ordersInCart,
-      });
+      const res = await get({ apiName: 'cart', path: '/cart' }).response;
+      const data = await res.body.json() as any;
+      setOrders(data || []);
     } catch (e) {
       alert(e);
     }
+  };
 
-    this.getOrderTotal();
-    this.setState({ isLoading: false });
-  }
+  useEffect(() => {
+    fetchCart().then(() => setIsLoading(false));
+  }, []);
 
-  listOrdersInCart() {
-    return API.get("cart", "/cart", null);
-  }
+  const orderTotal = orders.reduce((t, o) => t + o.price * o.quantity, 0).toFixed(2);
 
-  getOrderTotal = async () => {
-    const ordersInCart = await this.listOrdersInCart();
-    this.setState({
-      orders: ordersInCart,
-    });
+  if (isLoading) return <div className="loader"></div>;
 
-    let total = ordersInCart.reduce((total: number, book: Order) => {
-      return total + book.price * book.quantity
-    }, 0).toFixed(2);
-
-    this.setState({
-      orderTotal: total
-    });
-  }
-
-  onCheckout = () => {
-    this.setState({
-      toCheckout: true
-    });
-  }
-
-  render() {
-    if (this.state.toCheckout) return <Redirect to='/checkout' />
-
-    return (
-      this.state.isLoading ? <div className="loader"></div> :
-      <div className="Category">
-        <SearchBar />
-        <CategoryNavBar />
-        <div className="well-bs padding-bottom-120">
-            <div className="white-box no-margin-top">
-            <h3>Shopping cart</h3>
-          </div>
-          {this.state.orders.map(order => <CartProductRow order={order} key={order.bookId} calculateTotal={() => this.getOrderTotal()} />)}
-            <div className="pull-right checkout-padding">
-              <button className="btn btn-black" type="button" disabled={this.state.orders.length < 1} onClick={this.onCheckout}>Checkout</button>
-            </div>
-          </div>
-          <div className="well-bs col-md-12 full-page"></div>
+  return (
+    <div className="Category">
+      <SearchBar />
+      <CategoryNavBar />
+      <div className="well-bs padding-bottom-120">
+        <div className="white-box no-margin-top"><h3>Shopping cart</h3></div>
+        {orders.map(order => <CartProductRow order={order} key={order.bookId} calculateTotal={fetchCart} />)}
+        <div className="float-end checkout-padding">
+          <button className="btn btn-black" type="button" disabled={orders.length < 1} onClick={() => navigate('/checkout')}>Checkout (${orderTotal})</button>
         </div>
-    );
-  }
+      </div>
+      <div className="well-bs col-md-12 full-page"></div>
+    </div>
+  );
 }

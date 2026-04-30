@@ -1,52 +1,34 @@
 "use strict";
 
-const AWS = require("aws-sdk");
-const dynamoDb = new AWS.DynamoDB.DocumentClient();
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
+
+const client = new DynamoDBClient({});
+const dynamoDb = DynamoDBDocumentClient.from(client);
+
+const headers = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Credentials": true
+};
 
 // RemoveFromCart - Remove a particular book from a customer's cart
-exports.handler = (event, context, callback) => {
-  
-  // Return immediately if being called by warmer 
+exports.handler = async (event) => {
   if (event.source === "warmer") {
-    return callback(null, "Lambda is warm");
+    return "Lambda is warm";
   }
 
-  // Request body is passed in as a JSON encoded string in 'event.body'
   const data = JSON.parse(event.body);
-  const params = {
-    TableName: process.env.TABLE_NAME, // [ProjectName]-Cart
-    // 'Key' defines the partition and sort keys of the item to be deleted
-    // - 'customerId': Identity Pool identity id of the authenticated user
-    // - 'bookId': unique id of the book being deleted
-    Key: {
-     customerId: event.requestContext.identity.cognitoIdentityId,
-     bookId: data.bookId
-   }
-  };
 
-  dynamoDb.delete(params, (error, data) => {
-    // Set response headers to enable CORS (Cross-Origin Resource Sharing)
-    const headers = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Credentials" : true
-    };
-
-    // Return status code 500 on error
-    if (error) {
-      const response = {
-        statusCode: 500,
-        headers: headers,
-        body: error
-      };
-      callback(null, response);
-      return;
-    }
-
-    // Return status code 200 on success
-    const response = {
-      statusCode: 200,
-      headers: headers
-    };
-    callback(null, response);
-  });
-}
+  try {
+    await dynamoDb.send(new DeleteCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: {
+        customerId: "anonymous",
+        bookId: data.bookId
+      }
+    }));
+    return { statusCode: 200, headers };
+  } catch (error) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+  }
+};

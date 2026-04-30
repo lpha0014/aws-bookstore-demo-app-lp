@@ -1,81 +1,42 @@
-import React from "react";
-import "../../common/styles/productRow.css";
-import StarRating from "../../common/starRating/StarRating";
-import { API } from "aws-amplify";
-import AddToCart from "../../common/AddToCart";
-import FriendRecommendations from "../../common/friendRecommendations/FriendRecommendations";
-import { Book } from "../bestSellers/BestSellerProductRow";
-import { Order } from "../cart/CartProductRow";
+import { useState, useEffect } from 'react';
+import { get } from 'aws-amplify/api';
+import '../../common/styles/productRow.css';
+import StarRating from '../../common/starRating/StarRating';
+import AddToCart from '../../common/AddToCart';
+import FriendRecommendations from '../../common/friendRecommendations/FriendRecommendations';
+import { Book } from '../bestSellers/BestSellerProductRow';
+import { Order } from '../cart/CartProductRow';
 
-interface PurchasedProductRowProps {
-  order: Order;
-}
+export function PurchasedProductRow({ order }: { order: Order }) {
+  const [book, setBook] = useState<Book | undefined>();
 
-interface PurchasedProductRowState {
-  book: Book | undefined;
-}
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await get({ apiName: 'books', path: `/books/${order.bookId}` }).response;
+        setBook(await res.body.json() as any);
+      } catch (e) { alert(e); }
+    })();
+  }, [order.bookId]);
 
-export class PurchasedProductRow extends React.Component<PurchasedProductRowProps, PurchasedProductRowState> {
-  constructor(props: PurchasedProductRowProps) {
-    super(props);
+  if (!book) return <div className="white-box"><div className="media"><div className="loader-no-margin" /></div></div>;
 
-    this.state = {
-      book: undefined
-    };
-  }
-
-  async componentDidMount() {
-    try {
-      const book = await this.getBook(this.props.order);
-      this.setState({ book });
-    } catch (e) {
-      alert(e);
-    }
-  }
-
-  getBook(order: Order) {
-    return API.get("books", `/books/${order.bookId}`, null);
-  }
-
-  render() {
-    if (!this.state.book) {
-      return (
-        <div className="white-box">
-          <div className="media">
-            <div className="media-left media-middle">
-              <div className="loader-no-margin" />
-            </div>
-          </div>
+  return (
+    <div className="white-box">
+      <div className="media">
+        <div className="media-left media-middle">
+          <img className="media-object product-thumb" src={book.cover} alt={`${book.name} cover`} />
         </div>
-      );
-    }
-
-    return (
-      <div className="white-box">
-        <div className="media">
-          <div className="media-left media-middle">
-            <img className="media-object product-thumb" src={this.state.book.cover} alt={`${this.state.book.name} covers`} />
-          </div>
-          <div className="media-body">
-            <h3 className="media-heading">{this.state.book.name}
-              <div className="pull-right margin-1">
-                <small>{`${this.props.order.quantity} @ ${this.state.book.price}`}</small>
-              </div>
-            </h3>
-            <small>{this.state.book.category}</small>
-            <FriendRecommendations bookId={this.props.order.bookId} />
-            <div>
-              Rating
-              <AddToCart bookId={this.state.book.id} price={this.state.book.price} variant="buyAgain" />
-            </div>
-            <StarRating stars={this.state.book.rating} />
-          </div>
+        <div className="media-body">
+          <h3 className="media-heading">{book.name}<div className="float-end margin-1"><small>{`${order.quantity} @ ${book.price}`}</small></div></h3>
+          <small>{book.category}</small>
+          <FriendRecommendations bookId={order.bookId} />
+          <div>Rating<AddToCart bookId={book.id} price={book.price} variant="buyAgain" /></div>
+          <StarRating stars={book.rating} />
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 }
 
 export default PurchasedProductRow;
-
-
