@@ -1,0 +1,17 @@
+[
+  {"id": "b001", "name": "The Art of Cooking", "author": "Julia Smith", "category": "Cookbooks", "price": 24.99, "rating": 5, "cover": "https://via.placeholder.com/200x300?text=Cooking"},
+  {"id": "b002", "name": "Database Design Patterns", "author": "Alex Johnson", "category": "Database", "price": 39.99, "rating": 4, "cover": "https://via.placeholder.com/200x300?text=Database"},
+  {"id": "b003", "name": "The Dragon's Quest", "author": "Emily Rose", "category": "Fairy Tales", "price": 12.99, "rating": 5, "cover": "https://via.placeholder.com/200x300?text=Dragons"},
+  {"id": "b004", "name": "Galactic Voyager", "author": "Marcus Chen", "category": "Science Fiction", "price": 15.99, "rating": 4, "cover": "https://via.placeholder.com/200x300?text=SciFi"},
+  {"id": "b005", "name": "DIY Home Renovation", "author": "Sarah Builder", "category": "Home Improvement", "price": 29.99, "rating": 3, "cover": "https://via.placeholder.com/200x300?text=Home"},
+  {"id": "b006", "name": "Classic Car Restoration", "author": "Mike Wrench", "category": "Cars", "price": 34.99, "rating": 4, "cover": "https://via.placeholder.com/200x300?text=Cars"},
+  {"id": "b007", "name": "Woodworking for Beginners", "author": "Tom Carpenter", "category": "Woodwork", "price": 19.99, "rating": 5, "cover": "https://via.placeholder.com/200x300?text=Wood"},
+  {"id": "b008", "name": "Italian Kitchen Secrets", "author": "Maria Romano", "category": "Cookbooks", "price": 27.99, "rating": 5, "cover": "https://via.placeholder.com/200x300?text=Italian"},
+  {"id": "b009", "name": "NoSQL at Scale", "author": "David Park", "category": "Database", "price": 44.99, "rating": 4, "cover": "https://via.placeholder.com/200x300?text=NoSQL"},
+  {"id": "b010", "name": "The Enchanted Forest", "author": "Lisa Moon", "category": "Fairy Tales", "price": 9.99, "rating": 4, "cover": "https://via.placeholder.com/200x300?text=Forest"},
+  {"id": "b011", "name": "Mars Colony", "author": "James Webb", "category": "Science Fiction", "price": 18.99, "rating": 5, "cover": "https://via.placeholder.com/200x300?text=Mars"},
+  {"id": "b012", "name": "Smart Home Automation", "author": "Kevin Tech", "category": "Home Improvement", "price": 32.99, "rating": 3, "cover": "https://via.placeholder.com/200x300?text=Smart"},
+  {"id": "b013", "name": "Electric Vehicles Guide", "author": "Anna Volt", "category": "Cars", "price": 22.99, "rating": 4, "cover": "https://via.placeholder.com/200x300?text=EV"},
+  {"id": "b014", "name": "Fine Furniture Making", "author": "Robert Oak", "category": "Woodwork", "price": 42.99, "rating": 5, "cover": "https://via.placeholder.com/200x300?text=Furniture"},
+  {"id": "b015", "name": "Baking Bread at Home", "author": "Claire Dough", "category": "Cookbooks", "price": 16.99, "rating": 4, "cover": "https://via.placeholder.com/200x300?text=Bread"}
+]

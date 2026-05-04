@@ -17,7 +17,8 @@ exports.handler = async (event, context) => {
     await client.send(new CreateServiceLinkedRoleCommand({
       AWSServiceName: "opensearchservice.amazonaws.com"
     }));
-    console.log("OpenSearch service-linked role created");
+    console.log("OpenSearch service-linked role created, waiting for propagation...");
+    await new Promise(r => setTimeout(r, 15000));
   } catch (e) {
     // Role may already exist — that's fine
     console.log("Role creation skipped:", e.message);

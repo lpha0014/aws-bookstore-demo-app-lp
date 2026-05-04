@@ -15,7 +15,6 @@ Amplify.configure({
       cart: { endpoint: config.apiGateway.API_URL, region: config.apiGateway.REGION },
       orders: { endpoint: config.apiGateway.API_URL, region: config.apiGateway.REGION },
       search: { endpoint: config.apiGateway.API_URL, region: config.apiGateway.REGION },
-      recommendations: { endpoint: config.apiGateway.API_URL, region: config.apiGateway.REGION },
       bestsellers: { endpoint: config.apiGateway.API_URL, region: config.apiGateway.REGION },
     }
   }

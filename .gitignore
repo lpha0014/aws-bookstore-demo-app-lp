@@ -4,3 +4,9 @@
 *.pyc
 .DS_Store
 *.lock
+
+# Build artifacts
+dist/
+assets/build/
+assets/node_modules/
+local-api/node_modules/

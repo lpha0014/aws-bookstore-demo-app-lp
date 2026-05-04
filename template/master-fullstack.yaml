@@ -9,10 +9,6 @@ Parameters:
   AssetsBucketName:
     Description: S3 bucket containing Lambda deployment packages and data files.
     Type: String
-  NeptuneDataBucketName:
-    Description: S3 bucket containing Neptune seed data (CSV files).
-    Type: String
-    Default: ""
 Mappings:
   Constants:
     S3Keys:
@@ -27,16 +23,11 @@ Mappings:
       GetBestSellersCode: functions/GetBestSellers.zip
       CheckoutCode: functions/Checkout.zip
       UploadBooksCode: functions/UploadBooks.zip
-      GetRecommendationsCode: functions/GetRecommendations.zip
-      GetRecommendationsByBookCode: functions/GetRecommendationsByBook.zip
       SearchCode: functions/Search.zip
       UpdateSearchCode: functions/UpdateSearchCluster.zip
       UpdateBestSellersCode: functions/UpdateBestSellers.zip
-      NeptuneLoaderCode: functions/NeptuneLoader.zip
-      NeptuneIAMCode: functions/NeptuneIAM.zip
-      bookstoreNeptuneS3DataPath: /data/
-      booksData: data/books.json
       CreateOSRoleCode: functions/CreateOSRole.zip
+      booksData: data/books.json
       PythonLambdaLayer: functions/PythonLambdaLayer.zip
       DeleteBucketsCode: functions/DeleteBuckets.zip
 Resources:
@@ -99,438 +90,6 @@ Resources:
       RouteTableId: !Ref bookstoreVPCRouteTable
       SubnetId: !Ref bookstoreSubnet2    
     
-  bookstoreNeptuneSecurityGroup:
-    Type: "AWS::EC2::SecurityGroup"
-    Properties:
-      GroupDescription: "Security group for Neptune DB within book store app."
-      SecurityGroupIngress:
-        -
-          CidrIp: "0.0.0.0/0"
-          FromPort: 8182
-          ToPort: 8182
-          IpProtocol: tcp
-      VpcId:
-        Ref: bookstoreVPC
-
-  bookstoreNeptuneSubnetGroup:
-    Type: "AWS::Neptune::DBSubnetGroup"
-    Properties:
-      DBSubnetGroupDescription: "Subnet group for Neptune DB within book store app."
-      SubnetIds:
-        - !Ref bookstoreSubnet1
-        - !Ref bookstoreSubnet2
-
-  redisLambdaSecurityGroup:
-    Type: "AWS::EC2::SecurityGroup"
-    Properties:
-      VpcId:
-        Ref: bookstoreVPC
-      GroupDescription: "A component security group allowing access only to redis"  
-
-  bookstoreCacheSecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: Elasticache security group
-      SecurityGroupIngress:
-        -
-          IpProtocol: "tcp"
-          FromPort: "6379"
-          ToPort: "6379"
-          SourceSecurityGroupId:
-            Ref: redisLambdaSecurityGroup
-      VpcId: !Ref bookstoreVPC
-
-  bookstoreCacheSubnets:
-    Type: 'AWS::ElastiCache::SubnetGroup'
-    Properties:
-      Description: Subnets for ElastiCache
-      SubnetIds:
-        - Ref: bookstoreSubnet1        
-  
-  # ---------- NEPTUNE CLUSTER DEFINITION ---------
-
-  bookstoreNeptuneCluster:
-    Type: "AWS::Neptune::DBCluster"
-    Properties:
-      IamAuthEnabled : false
-      DBSubnetGroupName:
-        Ref: bookstoreNeptuneSubnetGroup
-      VpcSecurityGroupIds: [ !GetAtt bookstoreNeptuneSecurityGroup.GroupId ]
-  bookstoreNeptuneDB:
-    Type: "AWS::Neptune::DBInstance"
-    Properties:
-      DBClusterIdentifier: !Ref bookstoreNeptuneCluster
-      DBInstanceClass: "db.r6g.large"
-
-# ---------- IAM ROLE ATTACH FOR S3 BULK LOAD ------------
-
-  bookstoreNeptuneLoaderS3ReadPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-        - Action:
-          - s3:Get*
-          - s3:List*
-          Effect: Allow
-          Resource: "*"
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneLoaderS3ReadPolicy
-      Roles:
-      - Ref: bookstoreNeptuneLoaderS3ReadRole
-  bookstoreNeptuneLoaderS3ReadRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-        - Action: sts:AssumeRole
-          Effect: Allow
-          Principal:
-            Service:
-            - rds.amazonaws.com
-        Version: '2012-10-17'
-      Path: /
-
-  # ---------- CUSTOM CLOUDFORMATION RESOURCE FOR ATTACHING S3 READ ROLE TO NEPTUNE CLUSTER ---------
-
-  bookstoreNeptuneIAMAttach:
-    DependsOn: 
-      - bookstoreNeptuneIAMAttachLambdaRoleCloudWatchStream
-      - bookstoreNeptuneIAMAttachLambdaRoleCloudWatchGroup
-      - bookstoreNeptuneIAMAttachLambdaRoleEC2
-      - bookstoreNeptuneIAMAttachLambdaRoleRDS
-      - bookstoreNeptuneIAMAttachLambdaRole
-      - bookstoreNeptuneIAMAttachLambda
-      - bookstoreNeptuneLoaderS3ReadPolicy
-      - bookstoreNeptuneLoaderS3ReadRole
-    Type: Custom::NeptuneIAMAttach
-    Properties: 
-      ServiceToken:
-        Fn::GetAtt: [ bookstoreNeptuneIAMAttachLambda, Arn ]
-      NeptuneDB: !Ref bookstoreNeptuneCluster
-      IAMRole: 
-        Fn::GetAtt: [ bookstoreNeptuneLoaderS3ReadRole, Arn ]
-      Region: !Ref 'AWS::Region'
-  bookstoreNeptuneIAMAttachLambdaRoleCloudWatchStream:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-        - Action:
-          - logs:CreateLogStream
-          - logs:PutLogEvents
-          Effect: Allow
-          Resource: !Join [ "", [ "arn:aws:logs:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId" , ":log-group:/aws/lambda/",  !Ref bookstoreNeptuneIAMAttachLambda, ":*" ]]
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneIAMAttachLambdaRoleCloudWatchStream
-      Roles:
-      - Ref: bookstoreNeptuneIAMAttachLambdaRole
-  bookstoreNeptuneIAMAttachLambdaRoleCloudWatchGroup:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-        - Action:
-          - logs:CreateLogGroup
-          Effect: Allow
-          Resource: !Join [ "", [ "arn:aws:logs:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId" , ":*" ]]
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneIAMAttachLambdaRoleCloudWatchGroup
-      Roles:
-      - Ref: bookstoreNeptuneIAMAttachLambdaRole
-  bookstoreNeptuneIAMAttachLambdaRoleEC2:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-        - Action:
-          - ec2:CreateNetworkInterface
-          - ec2:DescribeNetworkInterfaces
-          - ec2:DeleteNetworkInterface
-          - ec2:DetachNetworkInterface
-          Effect: Allow
-          Resource: "*"
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneIAMAttachLambdaRoleEC2
-      Roles:
-      - Ref: bookstoreNeptuneIAMAttachLambdaRole
-  bookstoreNeptuneIAMAttachLambdaRoleRDS:
-    DependsOn: bookstoreNeptuneDB
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-          - 
-            Action:
-              - rds:AddRoleToDBCluster
-              - rds:DescribeDBClusters
-            Effect: Allow
-            Resource:
-              - "*"
-          - 
-            Action:
-              - iam:PassRole
-            Effect: Allow
-            Resource:
-              - Fn::GetAtt: [ bookstoreNeptuneLoaderS3ReadRole, Arn ]
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneIAMAttachLambdaRoleRDS
-      Roles:
-      - Ref: bookstoreNeptuneIAMAttachLambdaRole
-  bookstoreNeptuneIAMAttachLambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-        - Action: sts:AssumeRole
-          Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-        Version: '2012-10-17'
-      Path: /
-  bookstoreNeptuneIAMAttachLambda:
-    Type: AWS::Lambda::Function
-    DependsOn: bookstoreNeptuneDB
-    Properties:
-      Code:
-        S3Bucket: !Ref AssetsBucketName
-        S3Key: !FindInMap 
-                 - Constants
-                 - S3Keys
-                 - NeptuneIAMCode
-      Description: 'Lambda function to add an IAM policy to a Neptune cluster to allow for bulk load.'
-      Handler: lambda_function.lambda_handler
-      Layers:
-        - !Ref PythonLambdaLayer
-      MemorySize: 128
-      Role:
-        Fn::GetAtt: [ bookstoreNeptuneIAMAttachLambdaRole, Arn ]
-      Runtime: python3.12
-      Timeout: 30
-
-
-# ---------- VPC ENDPOINT FOR NEPTUNE BULK LOADER ACCESS TO S3 ---------
-
-  S3Endpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal: '*'
-            Action:
-              - 's3:Get*'
-              - 's3:PutObject'
-              - 's3:List*'
-            Resource:
-              - '*'
-      RouteTableIds:
-        - !Ref bookstoreVPCRouteTable
-      ServiceName: !Join [ "" , [ "com.amazonaws.", !Ref "AWS::Region", ".s3"]]
-      VpcId: !Ref bookstoreVPC
-
-# ---------- CUSTOM RESOURCE TO INITIATE NEPTUNE BULK LOAD PROCESS ---------
-  bookstoreNeptuneLoader: 
-    DependsOn:
-      - bookstoreNeptuneLoaderLambdaRoleCloudWatchStream
-      - bookstoreNeptuneLoaderLambdaRoleCloudWatchGroup
-      - bookstoreNeptuneLoaderLambdaRoleEC2
-      - bookstoreNeptuneLoaderLambdaRole      
-      - bookstoreNeptuneLoaderLambda
-      - bookstoreNeptuneLoaderS3ReadPolicy
-      - bookstoreNeptuneLoaderS3ReadRole
-      - bookstoreVPCRouteTableAssociation
-      - bookstoreVPCRouteTableAssociationTwo
-      - S3Endpoint
-    Type: "Custom::NeptuneLoader"
-    Properties: 
-      ServiceToken:
-        Fn::GetAtt: [ bookstoreNeptuneLoaderLambda, Arn]
-
-  bookstoreNeptuneLoaderLambdaRoleCloudWatchStream:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-        - Action:
-          - logs:CreateLogStream
-          - logs:PutLogEvents
-          Effect: Allow
-          Resource: !Join [ "", [ "arn:aws:logs:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId" , ":log-group:/aws/lambda/",  !Ref bookstoreNeptuneLoaderLambda, ":*" ]]
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneLoaderLambdaRoleCloudWatchStream
-      Roles:
-      - Ref: bookstoreNeptuneLoaderLambdaRole
-  bookstoreNeptuneLoaderLambdaRoleCloudWatchGroup:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-        - Action:
-          - logs:CreateLogGroup
-          Effect: Allow
-          Resource: !Join [ "", [ "arn:aws:logs:", !Ref "AWS::Region", ":", !Ref "AWS::AccountId" , ":*" ]]
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneLoaderLambdaRoleCloudWatchGroup
-      Roles:
-      - Ref: bookstoreNeptuneLoaderLambdaRole
-  bookstoreNeptuneLoaderLambdaRoleEC2:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyDocument:
-        Statement:
-        - Action:
-          - ec2:CreateNetworkInterface
-          - ec2:DescribeNetworkInterfaces
-          - ec2:DeleteNetworkInterface
-          - ec2:DetachNetworkInterface          
-          Effect: Allow
-          Resource: "*"
-        Version: '2012-10-17'
-      PolicyName: bookstoreNeptuneLoaderLambdaRoleEC2
-      Roles:
-      - Ref: bookstoreNeptuneLoaderLambdaRole
-  bookstoreNeptuneLoaderLambda:
-    Type: AWS::Lambda::Function
-    DependsOn: 
-      - bookstoreNeptuneDB
-      - S3Endpoint
-    Properties:
-      Code:
-        S3Bucket: !Ref AssetsBucketName
-        S3Key: !FindInMap 
-                 - Constants
-                 - S3Keys
-                 - NeptuneLoaderCode
-      Description: 'Lambda function to load data into Neptune instance.'
-      Environment:
-        Variables:
-          neptunedb:
-            Fn::GetAtt: [ bookstoreNeptuneCluster, Endpoint ] 
-          neptuneloads3path: !Join
-                              - ''
-                              - - 's3://'
-                                - !Ref NeptuneDataBucketName
-                                - !FindInMap
-                                  - Constants
-                                  - S3Keys
-                                  - bookstoreNeptuneS3DataPath
-          region: 
-            Ref: "AWS::Region"
-          s3loadiamrole: 
-            Fn::GetAtt: [ bookstoreNeptuneLoaderS3ReadRole, Arn]
-      Handler: lambda_function.lambda_handler
-      MemorySize: 128
-      Layers:
-        - !Ref PythonLambdaLayer
-      Role:
-        Fn::GetAtt: [ bookstoreNeptuneLoaderLambdaRole, Arn ]
-      Runtime: python3.12
-      Timeout: 180
-      VpcConfig:
-        SecurityGroupIds:
-          - Ref: bookstoreNeptuneSecurityGroup
-        SubnetIds:
-          - Ref: bookstoreSubnet1
-          - Ref: bookstoreSubnet2
-  bookstoreNeptuneLoaderLambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-      AssumeRolePolicyDocument:
-        Statement:
-        - Action: sts:AssumeRole
-          Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-        Version: '2012-10-17'
-      Path: /
-
-# ---------- ROLES FOR DYNAMODB ---------
-  DynamoDbRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      RoleName: !Sub '${ProjectName}-DynamoDbLambda'
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-      Policies:
-        - PolicyName: PutRidePolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'dynamodb:PutItem'
-                  - 'dynamodb:Query'
-                  - 'dynamodb:UpdateTable'
-                  - 'dynamodb:UpdateItem'
-                  - 'dynamodb:BatchWriteItem'
-                  - 'dynamodb:GetItem'
-                  - 'dynamodb:Scan'
-                  - 'dynamodb:DeleteItem'
-                Resource:
-                  - !GetAtt 
-                    - TBooks
-                    - Arn
-                  - !GetAtt 
-                    - TOrders
-                    - Arn
-                  - !GetAtt 
-                    - TCart
-                    - Arn
-                  - !Join 
-                    - ''
-                    - - !GetAtt 
-                        - TBooks
-                        - Arn
-                      - /*
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 07b29683-0ea5-44bf-a439-fcb89713fd09
-
-# ---------- ROLES FOR NEPTUNE ---------        
-  RecommendationsLambdaRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      RoleName: !Sub '${ProjectName}-RecommendationsLambdaRole'
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-      Policies:
-        - PolicyName: RecommendationsLambdaRoleEC2
-          PolicyDocument:
-            Statement:
-              - Action:
-                  - 'ec2:CreateNetworkInterface'
-                  - 'ec2:DescribeNetworkInterfaces'
-                  - 'ec2:DeleteNetworkInterface'
-                  - 'ec2:DetachNetworkInterface'
-                Effect: Allow
-                Resource: '*'
-            Version: 2012-10-17
 
 # ---------- DYNAMODB TABLES DEFINITIONS ---------
   TBooks:
@@ -708,7 +267,45 @@ Resources:
       AdvancedOptions:
         rest.action.multi.allow_explicit_index: true
 
-# ---------- ROLES FOR ELASTICACHE ---------  
+# ---------- IAM ROLES ---------
+  DynamoDbRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${ProjectName}-DynamoDbRole'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: DynamoDbPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:DeleteItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:BatchWriteItem'
+                Resource:
+                  - !GetAtt TBooks.Arn
+                  - !Sub '${TBooks.Arn}/index/*'
+                  - !GetAtt TOrders.Arn
+                  - !GetAtt TCart.Arn
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${AssetsBucketName}/*'
+
   RedisRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -728,7 +325,31 @@ Resources:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
         - 'arn:aws:iam::aws:policy/AWSLambdaInvocation-DynamoDB'
 
-# ---------- ELASTICACHE DEFINITIONS ---------         
+# ---------- ELASTICACHE DEFINITIONS ---------
+  redisLambdaSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      VpcId: !Ref bookstoreVPC
+      GroupDescription: "A component security group allowing access only to redis"
+
+  bookstoreCacheSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Elasticache security group
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: "6379"
+          ToPort: "6379"
+          SourceSecurityGroupId: !Ref redisLambdaSecurityGroup
+      VpcId: !Ref bookstoreVPC
+
+  bookstoreCacheSubnets:
+    Type: 'AWS::ElastiCache::SubnetGroup'
+    Properties:
+      Description: Subnets for ElastiCache
+      SubnetIds:
+        - !Ref bookstoreSubnet1
+
   ElastiCacheCluster:
     DependsOn: 
      - bookstoreCacheSubnets
@@ -736,14 +357,12 @@ Resources:
     Type: 'AWS::ElastiCache::CacheCluster'
     Properties:
       ClusterName: !Sub '${ProjectName}-cluster'
-      CacheNodeType: cache.t2.micro
+      CacheNodeType: cache.t3.micro
       NumCacheNodes: '1'
       Engine: redis
       CacheSubnetGroupName: !Ref bookstoreCacheSubnets
       VpcSecurityGroupIds:
-        - Fn::GetAtt:
-          - bookstoreCacheSecurityGroup
-          - 'GroupId'
+        - !GetAtt bookstoreCacheSecurityGroup.GroupId
         
 # ---------- LAMBDA STREAMING FUNCTIONS ---------     
   PythonLambdaLayer:
@@ -1097,66 +716,6 @@ Resources:
       'AWS::CloudFormation::Designer':
         id: 9c3f4191-a370-4344-a5b1-626228919c47
 
-# ---------- LAMBDA FUNCTIONS for NEPTUNE ---------  
-
-  FunctionGetRecommendations:
-    Type: 'AWS::Lambda::Function'
-    Properties:
-      FunctionName: !Sub '${ProjectName}-GetRecommendations'
-      Code:
-        S3Bucket: !Ref AssetsBucketName
-        S3Key: !FindInMap 
-          - Constants
-          - S3Keys
-          - GetRecommendationsCode
-      Description: Get the top 5 product recommendations from Neptune
-      Environment:
-        Variables:
-          neptunedb: !GetAtt bookstoreNeptuneCluster.Endpoint
-      Handler: index.handler
-      MemorySize: 256
-      Role:
-        'Fn::GetAtt':
-          - RecommendationsLambdaRole
-          - Arn
-      Runtime: python3.12
-      Timeout: 30
-      VpcConfig:
-        SecurityGroupIds:
-          - Ref: bookstoreNeptuneSecurityGroup
-        SubnetIds:
-          - Ref: bookstoreSubnet1
-          - Ref: bookstoreSubnet2
-
-  FunctionGetRecommendationsByBook:
-    Type: 'AWS::Lambda::Function'
-    Properties:
-      FunctionName: !Sub '${ProjectName}-GetRecommendationsByBook'
-      Code:
-        S3Bucket: !Ref AssetsBucketName
-        S3Key: !FindInMap 
-          - Constants
-          - S3Keys
-          - GetRecommendationsByBookCode
-      Description: Get friends who purchased this book
-      Environment:
-        Variables:
-          neptunedb: !GetAtt bookstoreNeptuneCluster.Endpoint 
-      Handler: index.handler
-      MemorySize: 256
-      Role:
-        'Fn::GetAtt':
-          - RecommendationsLambdaRole
-          - Arn
-      Runtime: python3.12
-      Timeout: 30
-      VpcConfig:
-        SecurityGroupIds:
-          - Ref: bookstoreNeptuneSecurityGroup
-        SubnetIds:
-          - Ref: bookstoreSubnet1
-          - Ref: bookstoreSubnet2
-        
 # ---------- LAMBDA FUNCTIONS for OPENSEARCH and ELASTICACHE  ---------          
   FunctionSearch:
     Type: 'AWS::Lambda::Function'
@@ -1246,35 +805,6 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 06a821b7-638e-471c-ab50-51710b73767c
-  FunctionGetRecommendationsPermissions:
-    Type: 'AWS::Lambda::Permission'
-    Properties:
-      Action: 'lambda:InvokeFunction'
-      FunctionName: !Ref FunctionGetRecommendations
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Join 
-        - ''
-        - - 'arn:aws:execute-api:'
-          - !Ref 'AWS::Region'
-          - ':'
-          - !Ref 'AWS::AccountId'
-          - ':'
-          - !Ref AppApi
-          - /*
-  FunctionGetRecommendationsByBookPermissions:
-    Type: 'AWS::Lambda::Permission'
-    Properties:
-      Action: 'lambda:InvokeFunction'
-      FunctionName: !Ref FunctionGetRecommendationsByBook
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Join 
-        - ''
-        - - 'arn:aws:execute-api:'
-          - !Ref 'AWS::Region'
-          - ':'
-          - !Ref 'AWS::AccountId'
-          - ':'
-          - !Ref AppApi
           - /* 
   FunctionGetBookPermissions:
     Type: 'AWS::Lambda::Permission'
@@ -1467,120 +997,6 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 3e7a32d4-9e4d-4ecc-89b2-77203c5d926b
-  RecomendationsApiRequestGET:
-    DependsOn:
-      - FunctionGetRecommendations
-    Type: 'AWS::ApiGateway::Method'
-    Properties:
-      AuthorizationType: NONE
-      HttpMethod: GET
-      Integration:
-        Type: AWS_PROXY
-        IntegrationHttpMethod: POST
-        Uri: !Join 
-          - ''
-          - - 'arn:aws:apigateway:'
-            - !Ref 'AWS::Region'
-            - ':lambda:path/2015-03-31/functions/'
-            - !GetAtt 
-              - FunctionGetRecommendations
-              - Arn
-            - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-      ResourceId: !Ref RecommendationsApiResource
-      RestApiId: !Ref AppApi
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: Empty
-  RecomendationsApiRequestOPTIONS:
-    Type: 'AWS::ApiGateway::Method'
-    Properties:
-      ResourceId: !Ref RecommendationsApiResource
-      RestApiId: !Ref AppApi
-      AuthorizationType: NONE
-      HttpMethod: OPTIONS
-      Integration:
-        Type: MOCK
-        IntegrationResponses:
-          - ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: >-
-                'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
-              method.response.header.Access-Control-Allow-Methods: '''GET,POST,PUT,DELETE,OPTIONS,HEAD,PATCH'''
-              method.response.header.Access-Control-Allow-Origin: '''*'''
-            ResponseTemplates:
-              application/json: ''
-            StatusCode: '200'
-        PassthroughBehavior: WHEN_NO_MATCH
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-      MethodResponses:
-        - ResponseModels:
-            application/json: Empty
-          ResponseParameters:
-            method.response.header.Access-Control-Allow-Headers: true
-            method.response.header.Access-Control-Allow-Methods: true
-            method.response.header.Access-Control-Allow-Origin: true
-          StatusCode: '200'
-  RecomendationsByBookApiRequestGET:
-    DependsOn:
-      - FunctionGetRecommendationsByBook
-    Type: 'AWS::ApiGateway::Method'
-    Properties:
-      AuthorizationType: NONE
-      HttpMethod: GET
-      Integration:
-        Type: AWS_PROXY
-        IntegrationHttpMethod: POST
-        Uri: !Join 
-          - ''
-          - - 'arn:aws:apigateway:'
-            - !Ref 'AWS::Region'
-            - ':lambda:path/2015-03-31/functions/'
-            - !GetAtt 
-              - FunctionGetRecommendationsByBook
-              - Arn
-            - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-      ResourceId: !Ref RecommendationsByBookApiResource
-      RequestParameters:
-        method.request.path.bookId: false
-      RestApiId: !Ref AppApi
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: Empty
-  RecomendationsByBookApiRequestOPTIONS:
-    Type: 'AWS::ApiGateway::Method'
-    Properties:
-      ResourceId: !Ref RecommendationsByBookApiResource
-      RestApiId: !Ref AppApi
-      AuthorizationType: NONE
-      HttpMethod: OPTIONS
-      Integration:
-        Type: MOCK
-        IntegrationResponses:
-          - ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: >-
-                'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
-              method.response.header.Access-Control-Allow-Methods: '''GET,POST,PUT,DELETE,OPTIONS,HEAD,PATCH'''
-              method.response.header.Access-Control-Allow-Origin: '''*'''
-            ResponseTemplates:
-              application/json: ''
-            StatusCode: '200'
-        PassthroughBehavior: WHEN_NO_MATCH
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-      MethodResponses:
-        - ResponseModels:
-            application/json: Empty
-          ResponseParameters:
-            method.response.header.Access-Control-Allow-Headers: true
-            method.response.header.Access-Control-Allow-Methods: true
-            method.response.header.Access-Control-Allow-Origin: true
-          StatusCode: '200'        
   BooksApiRequestGET:
     DependsOn:
       - FunctionListOrdersPermissions
@@ -2125,21 +1541,6 @@ Resources:
             method.response.header.Access-Control-Allow-Methods: true
             method.response.header.Access-Control-Allow-Origin: true
           StatusCode: '200'
-          
-  RecommendationsApiResource:
-    Type: 'AWS::ApiGateway::Resource'
-    Properties:
-      RestApiId: !Ref AppApi
-      ParentId: !GetAtt 
-        - AppApi
-        - RootResourceId
-      PathPart: recommendations
-  RecommendationsByBookApiResource:
-    Type: 'AWS::ApiGateway::Resource'
-    Properties:
-      RestApiId: !Ref AppApi
-      ParentId: !Ref RecommendationsApiResource
-      PathPart: '{bookId}'    
   BooksApiResource:
     Type: 'AWS::ApiGateway::Resource'
     Properties:
@@ -2224,10 +1625,6 @@ Resources:
       - CartApiRequestOPTIONS
       - CartItemApiRequestGET
       - CartItemApiRequestOPTIONS
-      - RecomendationsApiRequestGET
-      - RecomendationsApiRequestOPTIONS
-      - RecomendationsByBookApiRequestGET
-      - RecomendationsByBookApiRequestOPTIONS
       - SearchApiRequestGET
       - SearchApiRequestOPTIONS
       - BestsellersApiRequestGET
@@ -2243,13 +1640,14 @@ Resources:
 
   BooksUploader:
     Type: 'Custom::CustomResource'
+    DependsOn:
+      - FunctionUploadBooks
+      - UpdateSearchCluster
+      - OpenSearchDomain
     Properties:
       ServiceToken: !GetAtt FunctionUploadBooks.Arn
       ParameterOne: Parameter to pass into Custom Lambda Function
-      DependsOn: 
-       - FunctionUploadBooks
-       - UpdateSearchCluster
-       - OpenSearchDomain
+      ServiceTimeout: 900
 
 # ------------------------ FRONTEND ------------------------
   AssetsBucket:
@@ -2340,6 +1738,9 @@ Resources:
       Timeout: 300
   ESRoleCreator:
     Type: 'Custom::CustomResource'
+    DependsOn:
+      - CreateOSRoleFunction
+      - CreateOSRole
     Properties:
       ServiceToken: !GetAtt CreateOSRoleFunction.Arn
       ParameterOne: Parameter to pass into Custom Lambda Function
@@ -2393,13 +1794,13 @@ Resources:
           - DeleteBucketsCode
   DeleteBucketsObjects:
     Type: 'Custom::CustomResource'
+    DependsOn:
+      - BucketCleanupFunction
+      - BucketCleanupRole
     Properties:
       ServiceToken: !GetAtt BucketCleanupFunction.Arn
       BucketNames:
         - !Ref AssetsBucket
-      DependsOn:
-        - BucketCleanupFunction
-        - BucketCleanupRole
 
 Outputs:
   WebApplication:

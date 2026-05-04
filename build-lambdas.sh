@@ -67,12 +67,8 @@ echo "=== Building Python Lambda functions ==="
 # Python functions (single file, no external deps - those come from the layer)
 declare -a PYTHON_FUNCTIONS=(
   "APIs/search.py:Search"
-  "APIs/getRecommendations.py:GetRecommendations"
-  "APIs/getRecommendationsByBook.py:GetRecommendationsByBook"
   "streaming/updateSearchCluster.py:UpdateSearchCluster"
   "setup/deleteBuckets.py:DeleteBuckets"
-  "setup/neptuneIAM.py:NeptuneIAM"
-  "setup/neptuneLoader.py:NeptuneLoader"
 )
 
 for entry in "${PYTHON_FUNCTIONS[@]}"; do
@@ -91,11 +87,17 @@ for entry in "${PYTHON_FUNCTIONS[@]}"; do
 done
 
 echo "=== Building Python Lambda Layer ==="
-echo "  Installing requests, requests_aws4auth, gremlinpython for Python 3.12..."
+echo "  Installing requests, requests_aws4auth for Python 3.12..."
 LAYER_DIR=$(mktemp -d)
-pip install --quiet --target "$LAYER_DIR/python" \
-  requests requests-aws4auth gremlinpython 2>/dev/null
-(cd "$LAYER_DIR" && zip -qr "$DIST_DIR/functions/PythonLambdaLayer.zip" python/)
+PIP_CMD=$(command -v pip3 || command -v pip || echo "")
+if [ -z "$PIP_CMD" ]; then
+  echo "  ERROR: pip/pip3 not found. Skipping layer build."
+  echo "  Install Python 3.12 and pip, then re-run."
+else
+  $PIP_CMD install --target "$LAYER_DIR/python" \
+    requests requests-aws4auth
+  (cd "$LAYER_DIR" && zip -qr "$DIST_DIR/functions/PythonLambdaLayer.zip" python/)
+fi
 rm -rf "$LAYER_DIR"
 
 echo "=== Copying data files ==="
